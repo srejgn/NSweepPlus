@@ -1,0 +1,258 @@
+* Encoding: windows-1252.
+* 
+* Version 2021 03 01.
+* 
+* Please report bugs to: egonzalez@ets.org or eugene.gonzalez@iea-hamburg.de.
+*
+* About the program: NSweepPlus is an SPSS macro that reads in a set of variables from an SPSS
+*                    system file and identifies variables that have very low variance (<CRIT), 
+*                    and variables that are collinear with previous variables on the list (with 
+*                    residual variance <CRIT). The collinearity is analyzed in the order in which
+*                    the variables are specified in the parameter VARS. For example, when analyzing
+*                    variables Var1, Var2 and Var3, where Var1 and Var3 are collinear, it will
+*                    identify Var3 as collinear with the previous variables. If the variables are 
+*                    entered as Var3, Var2 and Var1, it will identify Var1 a collinear.
+*.
+* For more information, please refer to the User Manual.
+*.
+
+define !NSweepPlus
+  (indir   = !charend('/') !default("")    /
+   infile  = !charend('/') !default("")    /
+   outdir  = !charend('/') !default("")    /  
+   outfile = !charend('/') !default("")    /
+   idvars  = !charend('/') !default("")    /
+   vars    = !charend('/') !default("")    /
+   wgtvar  = !charend('/')                 /
+   crit    = !charend('/') !default(0.001) /
+   selcrit = !charend('/') !default("")    /
+   selvar  = !charend('/') !default("")    /
+   viewcod = !charend('/') !default("N")   /
+   mxloops = !charend('/') !default(100000)  ).
+
+preserve.
+new file.
+!if (!mxloops !ne !null) !then
+set mxloops = !mxloops.
+!ifend
+
+* If viewcode is selected.
+!if (!upcase(!viewcod)=Y) !then
+set mprint=on  printback=on.
+!else
+set mprint=off printback=off.
+!ifend
+
+dataset close all.
+new file.
+output close all.
+output new name = !OutFile.
+
+get file = !quote(!concat(!unquote(!indir),"\",!infile,".sav"))
+ / keep =  !vars !selvar !wgtvar.
+compute CaseSeq = $casenum.
+
+* This to get list of items with their variable labels.
+oms /select tables
+    /IF COMMANDS=['File Information'] SUBTYPES=['Variable Information']
+    /DESTINATION FORMAT = SAV OUTFILE = !quote(!concat(!unquote(!outdir),"\",!outfile,"_varinfo.sav")) viewer=no.
+display dictionary / var = !vars.
+omsend.
+
+!if (!selcrit !ne !null) !then
+select if (!selcrit).
+!ifend
+
+!if (!wgtvar !eq !null) !then
+compute wgtvar = 1.
+!else
+compute wgtvar = !wgtvar.
+!ifend
+
+select if (wgtvar > 0).
+
+missing values !vars ().
+
+title "Unweighted Descriptives".
+desc var = !vars.
+
+title "Weighted Descriptives".
+weight by wgtvar.
+desc var = !vars.
+
+* Start the matrix processor.
+matrix.
+
+get x / file = * / variables = !vars.
+get w / file = * / variables = wgtvar.
+
+* Create the intercept vector .
+compute k = make(nrow(x),1,1).
+
+* Add intercept vector to data matrix.
+compute kx = {k,x}.
+
+* Compute weights kx.
+compute wkx = kx.
+loop r = 1 to nrow(kx).
+loop c = 1 to ncol(kx).
+compute wkx(r,c) = kx(r,c) * w(r,1).
+end loop.
+end loop.
+
+* Compute x'x.
+compute xpx = t(kx)*wkx.
+
+* Sweep the first column to get means and sum of squared differences.
+compute sxpx = sweep(xpx,1).
+
+* Create a vector with variable numbers in sequence.
+compute varseq = t({1:nrow(xpx)})-1.
+
+* Take the first row of the swept matrix (means).
+compute mns   = sxpx(1:1,1:ncol(sxpx)).
+
+* Take the diagonal of the swept matrix (sum of squared differences).
+compute ssqd  = diag(sxpx).
+
+* Compute variance and standard deviation from the values along the diagonal.
+compute var  = ssqd * ssqd(1,1).
+compute stdev = var &**(1/2).
+
+* Compute Flag Vectors.
+compute LoVar    = make(ncol(x)+1,1,0).
+compute SmallPvt = make(ncol(x)+1,1,0).
+
+loop i = 2 to ncol(sxpx).
+do if (var(i,1) < !crit).
+compute LoVar(i,1) = 1.
+end if.
+do if (sxpx(i,i) >= !crit).
+compute sxpx =sweep(sxpx,i).
+else.
+compute SmallPvt(i,1) = 1.
+end if.
+
+end loop.
+
+* Add the matrices together.
+compute sumstats = {varseq, t(mns), ssqd, Var, StDev, LoVar, SmallPvt}.
+
+save sumstats
+ / outfile = * / variables = Position, Mean, SumSqDiff, Variance, StDev, LoVariance, IsCollinear. 
+end matrix.
+
+match files
+  / file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_varinfo.sav"))
+    rename = (var1 = VarName)
+  / file = *
+   / by position
+   / drop = Command_ Subtype_  Label_  MeasurementLevel Role ColumnWidth Alignment PrintFormat WriteFormat.
+
+do if (Position = 0).
+compute VarName = "Intercept".
+compute mean = 1.
+compute variance = 0.
+compute StDev=0.
+compute SumSqDiff = 0.
+end if.
+
+select if (position > 0).
+
+string InDir   !concat("(a",!length(!indir),")")
+       InFile  !concat("(a",!length(!infile),")")
+   !if (!selvar  !ne !null) !then SelVar  !concat("(a",!length(!selvar),")")  !else selvar (a1)  !ifend
+   !if (!selcrit !ne !null) !then SelCrit !concat("(a",!length(!selcrit),")") !else selcrit (a1) !ifend 
+       Weight (a32).
+
+compute Weight  = !quote(!unquote(!wgtvar)).
+compute InDir   = !quote(!unquote(!indir)).
+compute InFile  = !quote(!infile).
+compute SelVar  = !quote(!selvar).
+compute SelCrit = !quote(!selcrit).
+
+save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_SweepSummary.sav")).
+save translate
+  / outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_SweepSummary.csv"))
+  / replace  / type = csv  / fieldnames.
+
+select if (LoVariance = 0 and IsCollinear = 0).
+compute k = 1.
+sort cases by k.
+match files
+ / file = *
+ / by k
+ / first = FirstCase
+ / last = LastCase.
+execute.
+
+string cmd1 (a15) cmd2 (a128).
+if (FirstCase = 1) cmd1 = "factor var = ".
+if (LastCase = 1)  cmd2 = "/print=initial/criteria=mineigen(0.000)/extract=pc/rotation=norotate/save=reg (all,PComp).".
+
+write outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PCASyntax.ieasps")) 
+  / cmd1 " " VarName cmd2.
+execute.
+
+get file = !quote(!concat(!unquote(!indir),"\",!infile,".sav"))
+ / keep = !idvars !vars !selvar !wgtvar.
+compute CaseSeq = $casenum.
+
+!if (!selcrit !ne !null) !then
+select if (!selcrit).
+!ifend
+
+!if (!wgtvar !eq !null) !then
+compute wgtvar = 1.
+!else
+compute wgtvar = !wgtvar.
+!ifend
+
+select if (wgtvar > 0).
+
+missing values !vars ().
+
+oms /select tables
+    /IF COMMANDS=['Factor Analysis'] SUBTYPES=['Total Variance Explained']
+    /DESTINATION FORMAT = SAV OUTFILE = !quote(!concat(!unquote(!outdir),"\",!outfile,"_VarExplained.sav")).
+weight by wgtvar.
+include file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PCASyntax.ieasps")).
+omsend.
+
+save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PCA.sav")) / drop = !vars.
+
+get file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_VarExplained.sav"))
+  / drop = Command_ Subtype_ Label_
+  / rename = (Var1 
+              InitialEigenvalues_Total
+              InitialEigenvalues_ofVariance
+              InitialEigenvalues_Cumulative =
+              PComp Eigenvalue ProportionVariance ProportionVarianceCummulative).
+save translate
+  / outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_VarExplained.csv")) 
+  / replace  / type = csv  / fieldnames.
+save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_VarExplained.sav")).
+
+string tmptxt (a64).
+compute tmptxt = concat("compute PCompR",ltrim(string(PComp,f3.0))," = PComp",ltrim(string(PComp,f3.0))," * sqrt(",ltrim(string(Eigenvalue,f13.7)),").").
+write outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_RescalePC.ieasps"))
+  /1 tmptxt.
+
+get file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PCA.sav")).
+include file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_RescalePC.ieasps")).
+save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PCA.sav")) .
+save translate
+  / outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PCA.csv"))  
+  / replace  / type = csv  / fieldnames.
+desc vars = all.
+
+*new file.
+erase file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_VarInfo.sav")).
+
+output save
+  outfile= !quote(!concat(!unquote(!outdir),"\",!outfile,"_Output.spv"))
+  lock = no.
+
+restore.
+
+!enddefine.
