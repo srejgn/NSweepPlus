@@ -246,6 +246,7 @@ save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PComp.sav")) .
 save translate
   / outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PComp.csv"))  
   / replace  / type = csv  / fieldnames.
+weight by wgtvar.
 desc vars = all.
 
 *new file.
