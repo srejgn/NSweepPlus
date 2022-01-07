@@ -219,7 +219,7 @@ weight by wgtvar.
 include file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PCASyntax.ieasps")).
 omsend.
 
-save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PCA.sav")) / drop = !vars.
+save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PComp.sav")) / drop = !vars.
 
 get file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_VarExplained.sav"))
   / drop = Command_ Subtype_ Label_
@@ -238,11 +238,13 @@ compute tmptxt = concat("compute PCompR",ltrim(string(PComp,f3.0))," = PComp",lt
 write outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_RescalePC.ieasps"))
   /1 tmptxt.
 
-get file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PCA.sav")).
+get file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PComp.sav")).
 include file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_RescalePC.ieasps")).
-save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PCA.sav")) .
+
+weight off.
+save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PComp.sav")) .
 save translate
-  / outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PCA.csv"))  
+  / outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PComp.csv"))  
   / replace  / type = csv  / fieldnames.
 desc vars = all.
 
