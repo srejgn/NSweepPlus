@@ -174,7 +174,7 @@ compute SelCrit = !quote(!selcrit).
 save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_SweepSummary.sav")).
 save translate
   / outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_SweepSummary.csv"))
-  / replace  / type = csv  / fieldnames.
+  / replace  / type = csv  / fieldnames / encoding = 'LOCALE'.
 
 select if (LoVariance = 0 and IsCollinear = 0).
 compute k = 1.
@@ -188,7 +188,7 @@ execute.
 
 string cmd1 (a15) cmd2 (a128).
 if (FirstCase = 1) cmd1 = "factor var = ".
-if (LastCase = 1)  cmd2 = "/print=initial/criteria=mineigen(0.000)/extract=pc/rotation=norotate/save=reg (all,PComp).".
+if (LastCase = 1)  cmd2 = "/print=default/criteria=mineigen(0.000)/extract=pc/rotation=norotate/save=reg (all,PComp).".
 
 write outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PCASyntax.ieasps")) 
   / cmd1 " " VarName cmd2.
@@ -215,6 +215,10 @@ missing values !vars ().
 oms /select tables
     /IF COMMANDS=['Factor Analysis'] SUBTYPES=['Total Variance Explained']
     /DESTINATION FORMAT = SAV OUTFILE = !quote(!concat(!unquote(!outdir),"\",!outfile,"_VarExplained.sav")).
+oms /select tables
+    /IF COMMANDS=['Factor Analysis'] SUBTYPES=['Factor Matrix']
+    /DESTINATION FORMAT = SAV OUTFILE = !quote(!concat(!unquote(!outdir),"\",!outfile,"_ComponentMatrix.sav")).
+
 weight by wgtvar.
 include file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PCASyntax.ieasps")).
 omsend.
@@ -227,10 +231,10 @@ get file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_VarExplained.sav"))
               InitialEigenvalues_Total
               InitialEigenvalues_ofVariance
               InitialEigenvalues_Cumulative =
-              PComp Eigenvalue ProportionVariance ProportionVarianceCummulative).
+              PComp Eigenvalue Variance VarianceCummulative).
 save translate
   / outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_VarExplained.csv")) 
-  / replace  / type = csv  / fieldnames.
+  / replace  / type = csv  / fieldnames / encoding = 'LOCALE'.
 save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_VarExplained.sav")).
 
 string tmptxt (a64).
@@ -245,9 +249,18 @@ weight off.
 save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PComp.sav")) .
 save translate
   / outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PComp.csv"))  
-  / replace  / type = csv  / fieldnames.
+  / replace  / type = csv / fieldnames / encoding = 'LOCALE'.
 weight by wgtvar.
 desc vars = all.
+
+
+get file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_ComponentMatrix.sav"))
+  / drop = Command_ Subtype_ Label_ / rename = (Var1 = Variable).
+save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_ComponentMatrix.sav")).
+save translate
+  / outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_ComponentMatrix.csv"))  
+  / replace  / type = csv / fieldnames / encoding = 'LOCALE'.
+
 
 *new file.
 erase file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_VarInfo.sav")).
