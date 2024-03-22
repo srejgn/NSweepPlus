@@ -30,8 +30,11 @@ define !NSweepPlus
    proxy    = !charend('/')                  /
    ePComp   = !charend('/') !default("Y")    /
    viewcod  = !charend('/') !default("N")    /
+   writecsv = !charend('/') !default(Y)      /
+   writehtm = !charend('/') !default(Y)      /
    mxloops  = !charend('/') !default(100000) /
-   mxcells  = !charend('/') !default(4000000)).
+   mxcells  = !charend('/') !default(1000000)/
+   delsav   = !charend('/') !default(N)  ).
 
 omsend.
 
@@ -52,7 +55,7 @@ set mprint=off printback=off.
 
 dataset close all.
 new file.
-output close all.
+output close *.
 output new name = !OutFile.
 
 get file = !quote(!concat(!unquote(!indir),"\",!infile,".sav"))
@@ -102,7 +105,7 @@ get w / file = * / variables = wgtvar.
 * Calculate sample size.
 compute n = nrow(w).
 
-* Create the intercept vector .
+* Create the intercept vector.
 compute k = make(nrow(x),1,1).
 
 * Add intercept vector to data matrix.
@@ -234,7 +237,11 @@ missing values !vars ().
 
 oms / select all
     / if commands = ['Factor Analysis']
-    / destination viewer = no.
+    / destination viewer = NO.
+OMS
+  / SELECT WARNINGS
+  / IF COMMANDS=['Factor Analysis']
+  / DESTINATION VIEWER=YES.
 oms / select tables
     / IF COMMANDS=['Factor Analysis'] SUBTYPES=['Total Variance Explained']
     / DESTINATION viewer = no FORMAT = SAV OUTFILE = !quote(!concat(!unquote(!outdir),"\",!outfile,"_VarExplained.sav"))  
@@ -318,9 +325,11 @@ include file = !quote(!concat(!unquote(!outdir),"\",!outfile,"_RescalePC.ieasps"
 
 weight off.
 save outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PComp.sav")).
+!if (!upcase(!writecsv) = Y) !then
 save translate
   / outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_PComp.csv"))  
   / replace  / type = csv / fieldnames / encoding = 'LOCALE'.
+!ifend
 weight by wgtvar.
 desc vars = all.
 
@@ -383,11 +392,23 @@ output save
   outfile= !quote(!concat(!unquote(!outdir),"\",!outfile,"_Output.spv"))
   lock = no.
 
+!if (!upcase(!writehtm) = Y) !then
 output export
   / contents export=visible layers=printsetting modelviews=printsetting
   / html documentfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_Output.htm"))
     notescaptions=yes interactlayers=no styling=yes imageformat=jpg
   / jpg percentsize=100 grayscale=no.
+!ifend
+
+
+!if (!upcase(!delsav) = Y) !then
+!quote(!concat(!unquote(!outdir),"\",!outfile,"_ComponentMatrix.sav")).
+!quote(!concat(!unquote(!outdir),"\",!outfile,"_PComp.sav")).
+!quote(!concat(!unquote(!outdir),"\",!outfile,"_VarExplained.sav")).
+!quote(!concat(!unquote(!outdir),"\",!outfile,"_SweepSummary.sav")).
+!quote(!concat(!unquote(!outdir),"\",!outfile,"_DescriptiveStats.sav")).
+!ifend
+
 
 restore.
 
