@@ -93,8 +93,8 @@ desc var = !vars.
 omsend tag = 'desc1'.
 
 *title "Weighted Descriptives".
-*weight by wgtvar.
-*desc var = !vars.
+weight by wgtvar.
+desc var = !vars.
 
 * Start the matrix processor.
 matrix.
@@ -121,44 +121,52 @@ end loop.
 
 * Compute x'x.
 compute xpx = t(kx)*wkx.
+print xpx.
 
 * Sweep the first column to get means and sum of squared differences.
 compute sxpx = sweep(xpx,1).
+print sxpx.
 
 * Create a vector with variable numbers in sequence.
 compute varseq = t({1:nrow(xpx)})-1.
 
 * Take the first row of the swept matrix (means).
 compute mns   = sxpx(1:1,1:ncol(sxpx)).
+print mns.
 
 * Take the diagonal of the swept matrix (sum of squared differences).
 compute ssqd  = diag(sxpx).
-
+print ssqd.
 * Compute variance and standard deviation from the values along the diagonal.
 compute var   = ssqd * ssqd(1,1).
 compute stdev = var &**(1/2).
+print var.
+print stdev.
 
 * Compute Flag Vectors.
-compute LoVar    = make(ncol(x)+1,1,0).
+compute NoVar    = make(ncol(x)+1,1,0).
 compute SmallPvt = make(ncol(x)+1,1,0).
 
 loop i = 2 to ncol(sxpx).
-do if (var(i,1) < !crit).
-compute LoVar(i,1) = 1.
-end if.
-do if (sxpx(i,i) >= !crit).
+
+do if (var(i,1) = 0.0).
+compute NoVar(i,1) = 1.
+*print sxpx(i,i).
+*print ssqd(i,1).
+else.
+do if (sxpx(i,i)/ssqd(i,1) >= !crit).
 compute sxpx =sweep(sxpx,i).
 else.
 compute SmallPvt(i,1) = 1.
 end if.
-
+end if.
 end loop.
 
 * Add the matrices together.
-compute sumstats = {varseq, t(mns), ssqd, Var, StDev, LoVar, SmallPvt}.
+compute sumstats = {varseq, t(mns), ssqd, Var, StDev, NoVar, SmallPvt}.
 
 save sumstats
- / outfile = * / variables = Position, Mean, SumSqDiff, Variance, StDev, LoVariance, IsCollinear. 
+ / outfile = * / variables = Position, Mean, SumSqDiff, Variance, StDev, NoVariance, IsCollinear.
 
 save n
  / outfile =  !quote(!concat(!unquote(!outdir),"\",!outfile,"_ncases.sav")).
@@ -199,7 +207,7 @@ save translate
   / outfile = !quote(!concat(!unquote(!outdir),"\",!outfile,"_SweepSummary.csv"))
   / replace  / type = csv  / fieldnames / encoding = 'LOCALE'.
 
-select if (LoVariance = 0 and IsCollinear = 0).
+select if (NoVariance = 0 and IsCollinear = 0).
 compute k = 1.
 sort cases by k.
 match files
